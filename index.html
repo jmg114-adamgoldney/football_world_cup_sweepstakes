@@ -733,6 +733,9 @@ async function loadOdds() {
 
 function applyLive(events) {
   const fix = n => ESPN_NAME_FIX[n] || n;
+  // ET date can roll past midnight for late West-Coast kickoffs (e.g. Vancouver 9pm PT
+  // = midnight ET = next day), so match fixtures within a ±1-day window.
+  const dayClose = (a, b) => Math.abs(new Date(a) - new Date(b)) <= 864e5;
   const elimAuto = []; // [team, stageLabel, sortKey]
   const scorerMap = {};
 
@@ -764,8 +767,8 @@ function applyLive(events) {
     const et = new Date(new Date(ev.date).getTime() - 4*3600*1000).toISOString();
     const dStr = et.slice(0,10), tStr = et.slice(11,16);
 
-    // group-stage match → RESULTS (teams + same ET date, so knockout rematches don't collide)
-    const gm = MATCHES.find(m => m[1]===dStr && ((m[4]===hName && m[5]===aName) || (m[4]===aName && m[5]===hName)));
+    // group-stage match → RESULTS (teams + ET date within 1 day, so knockout rematches don't collide)
+    const gm = MATCHES.find(m => dayClose(m[1],dStr) && ((m[4]===hName && m[5]===aName) || (m[4]===aName && m[5]===hName)));
     if (gm) {
       if (state === "pre") return;
       const hs = parseInt(home.score) || 0, as = parseInt(away.score) || 0;
@@ -778,7 +781,8 @@ function applyLive(events) {
 
     // knockout match → KNOCKOUT entry, matched by kickoff in ET (UTC-4)
     const ko = KNOCKOUT.find(k => k.d === dStr && k.t === tStr)
-            || KNOCKOUT.find(k => k.d === dStr && comp.venue && comp.venue.address && k.v.indexOf(comp.venue.address.city) !== -1);
+            || KNOCKOUT.find(k => k.d === dStr && comp.venue && comp.venue.address && k.v.indexOf(comp.venue.address.city) !== -1)
+            || KNOCKOUT.find(k => dayClose(k.d,dStr) && k.t === tStr && comp.venue && comp.venue.address && k.v.indexOf(comp.venue.address.city) !== -1);
     if (!ko || !KNOWN_TEAMS.has(hName) || !KNOWN_TEAMS.has(aName)) return;
     ko.teams = [hName, aName];
     if (state === "pre") return;
